@@ -129,6 +129,16 @@ async def price_fetch_loop():
 
     # Import arbitrage engine here to avoid circular import
     from ..core.arbitrage import find_arbitrage_opportunities as find_opps
+    from ..alerts.telegram import send_opportunity as _telegram_send
+
+    def _send_telegram_alert(opp: ArbitrageOpportunity):
+        """Send alert if Telegram is configured and profit threshold is met."""
+        if not CONFIG.telegram_enabled:
+            return
+        try:
+            loop.run_in_executor(None, _telegram_send, opp)
+        except Exception:
+            pass
 
     while True:
         try:
@@ -159,6 +169,9 @@ async def price_fetch_loop():
                                 "raw_spread_pct": getattr(o, "raw_spread_pct", 0),
                                 "profit_pct": profit,
                             })
+                            # Fire Telegram alert if profit exceeds threshold
+                            if profit >= CONFIG.min_profit_pct:
+                                _send_telegram_alert(o)
                     except Exception:
                         pass
 
