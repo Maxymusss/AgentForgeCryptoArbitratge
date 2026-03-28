@@ -25,6 +25,61 @@
         </div>
     </header>
 
+    <!-- EXCHANGE BALANCES BAR -->
+    <div class="balances-bar" id="balances-bar">
+        <span class="balances-label">💼 EXCHANGE BALANCES</span>
+        <div class="balance-item" id="bal-binance">
+            <span class="ex-dot" style="background:#f0b90b"></span>
+            <span class="ex-name">Binance</span>
+            <span class="ex-balance" id="bal-binance-val">—</span>
+        </div>
+        <div class="balance-item" id="bal-coinbase">
+            <span class="ex-dot" style="background:#0052ff"></span>
+            <span class="ex-name">Coinbase</span>
+            <span class="ex-balance" id="bal-coinbase-val">—</span>
+        </div>
+        <div class="balance-item" id="bal-kraken">
+            <span class="ex-dot" style="background:#5741d9"></span>
+            <span class="ex-name">Kraken</span>
+            <span class="ex-balance" id="bal-kraken-val">—</span>
+        </div>
+        <div class="balance-item" id="bal-bybit">
+            <span class="ex-dot" style="background:#f7a800"></span>
+            <span class="ex-name">Bybit</span>
+            <span class="ex-balance" id="bal-bybit-val">—</span>
+        </div>
+        <div class="balance-item" id="bal-okx">
+            <span class="ex-dot" style="background:#fff; border: 1px solid #333"></span>
+            <span class="ex-name">OKX</span>
+            <span class="ex-balance" id="bal-okx-val">—</span>
+        </div>
+        <div class="balance-item" id="bal-gateio">
+            <span class="ex-dot" style="background:#17e78c"></span>
+            <span class="ex-name">Gate.io</span>
+            <span class="ex-balance" id="bal-gateio-val">—</span>
+        </div>
+        <div class="balance-item total-balance">
+            <span class="ex-name">TOTAL</span>
+            <span class="ex-balance" id="bal-total">—</span>
+        </div>
+        <button class="edit-balances-btn" onclick="openBalanceEditor()" title="Edit balances">✏️</button>
+    </div>
+
+    <!-- BALANCE EDITOR MODAL -->
+    <div id="balance-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>✏️ EDIT EXCHANGE BALANCES (MOCK)</span>
+                <button class="modal-close" onclick="closeBalanceEditor()">✕</button>
+            </div>
+            <div class="modal-body" id="balance-editor-rows"></div>
+            <div class="modal-footer">
+                <button class="btn-save" onclick="saveBalances()">SAVE</button>
+                <span class="save-status" id="bal-save-status"></span>
+            </div>
+        </div>
+    </div>
+
     <div class="main-grid">
         <!-- PRICE MATRIX -->
         <section class="panel price-matrix">

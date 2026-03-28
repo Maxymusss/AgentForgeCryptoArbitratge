@@ -115,6 +115,18 @@ class Config:
     def max_exposure_per_pair(self) -> dict[str, float]:
         return self._settings.get("max_exposure_per_pair", {})
 
+    @property
+    def exchange_balances(self) -> dict[str, float]:
+        """Mock exchange balances (USD) for display purposes."""
+        return self._settings.get("exchange_balances", {
+            "binance": 10000,
+            "coinbase": 5000,
+            "kraken": 2500,
+            "bybit": 5000,
+            "okx": 3000,
+            "gateio": 2000,
+        })
+
     # How many of the top coins to scan (from CoinGecko)
     top_coins_limit: int = 50
 

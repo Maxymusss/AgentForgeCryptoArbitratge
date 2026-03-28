@@ -284,3 +284,94 @@ function fmt(v) {
 setInterval(updateClock, 1000);
 updateClock();
 connect();
+loadBalances();
+
+function loadBalances() {
+    fetch('/api/balances')
+        .then(r => r.json())
+        .then(balances => renderBalances(balances))
+        .catch(() => {});
+}
+
+function renderBalances(balances) {
+    let total = 0;
+    for (const ex of EXCHANGES) {
+        const val = balances[ex];
+        const el = $(`bal-${ex}-val`);
+        if (el && val != null) {
+            el.textContent = '$' + Number(val).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            total += Number(val);
+        }
+    }
+    const totalEl = $('bal-total');
+    if (totalEl) {
+        totalEl.textContent = '$' + total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+}
+
+function openBalanceEditor() {
+    const modal = $('balance-modal');
+    modal.style.display = 'flex';
+
+    // Build editor rows
+    fetch('/api/balances')
+        .then(r => r.json())
+        .then(balances => {
+            const container = $('balance-editor-rows');
+            const EXCHANGES_EDITOR = ['binance','coinbase','kraken','bybit','okx','gateio'];
+            container.innerHTML = '';
+            for (const ex of EXCHANGES_EDITOR) {
+                const row = document.createElement('div');
+                row.className = 'balance-editor-row';
+                row.innerHTML = `
+                    <span class="ex-dot-sm" style="background:${exColor(ex)}"></span>
+                    <span class="balance-ex-label">${exLabel(ex)}</span>
+                    <span style="color:var(--text-dim); font-size:12px">$</span>
+                    <input type="number" class="balance-input" id="be-${ex}"
+                        value="${balances[ex] ?? ''}" min="0" step="100"
+                        placeholder="0">
+                `;
+                container.appendChild(row);
+            }
+        });
+}
+
+function closeBalanceEditor() {
+    $('balance-modal').style.display = 'none';
+    $('bal-save-status').textContent = '';
+}
+
+async function saveBalances() {
+    const EXCHANGES_EDITOR = ['binance','coinbase','kraken','bybit','okx','gateio'];
+    const balances = {};
+    for (const ex of EXCHANGES_EDITOR) {
+        const input = $(`be-${ex}`);
+        if (input) {
+            const v = parseFloat(input.value);
+            balances[ex] = isNaN(v) ? 0 : Math.max(0, v);
+        }
+    }
+    const r = await fetch('/api/balances', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ balances }),
+    });
+    const el = $('bal-save-status');
+    if (r.ok) {
+        el.textContent = '✓ SAVED';
+        el.style.color = 'var(--profit)';
+        closeBalanceEditor();
+        loadBalances();
+    } else {
+        el.textContent = '✗ FAILED';
+        el.style.color = 'var(--loss)';
+    }
+}
+
+// Close modal on background click
+document.addEventListener('click', function(e) {
+    const modal = $('balance-modal');
+    if (modal && modal.style.display === 'flex' && e.target === modal) {
+        closeBalanceEditor();
+    }
+});

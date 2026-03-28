@@ -215,3 +215,124 @@ header {
     font-family: 'Share Tech Mono', monospace; font-size: 9px;
     color: var(--text-dim); margin-top: 6px; letter-spacing: 0.5px;
 }
+
+/* Exchange Balances Bar */
+.balances-bar {
+    display: flex; align-items: center; gap: 20px;
+    padding: 10px 24px; background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto; white-space: nowrap;
+}
+.balances-label {
+    font-family: 'Share Tech Mono', monospace; font-size: 10px;
+    letter-spacing: 1px; color: var(--text-dim); flex-shrink: 0;
+}
+.balance-item {
+    display: flex; align-items: center; gap: 6px;
+    font-family: 'Share Tech Mono', monospace; font-size: 12px;
+}
+.balance-item.total-balance { margin-left: auto; }
+.balance-item.total-balance .ex-name { color: var(--accent); font-weight: 700; }
+.balance-item.total-balance .ex-balance { color: var(--profit); font-weight: 700; text-shadow: var(--glow-profit); }
+.ex-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.ex-dot-sm { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ex-name { color: var(--text); font-size: 11px; }
+.ex-balance { color: var(--text); font-size: 12px; font-weight: 600; }
+.edit-balances-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-size: 11px; padding: 2px 6px; border-radius: 3px; cursor: pointer; flex-shrink: 0;
+}
+.edit-balances-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Balance Editor Modal */
+.modal {
+    position: fixed; inset: 0; background: rgba(5,8,16,0.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999; backdrop-filter: blur(4px);
+}
+.modal-content {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px;
+    width: 420px; max-width: 95vw; overflow: hidden;
+}
+.modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 20px; background: rgba(0,240,255,0.04);
+    border-bottom: 1px solid var(--border);
+    font-family: 'Share Tech Mono', monospace; font-size: 12px;
+    letter-spacing: 1px; color: var(--accent);
+}
+.modal-close {
+    background: transparent; border: none; color: var(--text-dim);
+    font-size: 14px; cursor: pointer; padding: 0 4px;
+}
+.modal-close:hover { color: var(--loss); }
+.modal-body { padding: 16px 20px; }
+.modal-footer {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px; border-top: 1px solid var(--border);
+}
+.balance-editor-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid rgba(26,39,68,0.4);
+}
+.balance-editor-row:last-child { border-bottom: none; }
+.balance-ex-label { font-size: 13px; color: var(--text); width: 80px; }
+.balance-input {
+    flex: 1; background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: 3px;
+    font-family: 'Share Tech Mono', monospace; font-size: 13px;
+}
+.balance-input:focus { outline: none; border-color: var(--accent); }
+
+.btn-save {
+    background: var(--accent); color: #000; border: none;
+    padding: 8px 24px; border-radius: 3px; font-size: 12px;
+    font-weight: 700; cursor: pointer; letter-spacing: 1px;
+    font-family: 'Rajdhani', sans-serif;
+}
+.btn-save:hover { opacity: 0.85; }
+.save-status { font-size: 12px; font-family: 'Share Tech Mono', monospace; }
+
+/* Filter Buttons */
+.filter-row {
+    display: flex; gap: 6px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0, 240, 255, 0.02);
+}
+.filter-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: 1px;
+    padding: 4px 10px; border-radius: 2px; cursor: pointer; transition: all 0.2s;
+}
+.filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+.filter-btn.active, .filter-btn.active-btn {
+    background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700;
+}
+.active-btn { background: var(--accent); border-color: var(--accent); color: #000; }
+
+.small-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1px;
+    padding: 2px 6px; border-radius: 2px; cursor: pointer; transition: all 0.2s;
+}
+.small-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Pair Selector */
+.pair-selector {
+    border-bottom: 1px solid var(--border); padding: 8px 12px;
+    background: rgba(0, 240, 255, 0.02); max-height: 180px; overflow-y: auto;
+}
+.pair-selector-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    font-family: 'Share Tech Mono', monospace; font-size: 10px; letter-spacing: 1px; color: var(--text-dim);
+}
+.pair-checkboxes {
+    display: flex; flex-wrap: wrap; gap: 6px;
+}
+.pair-check {
+    display: flex; align-items: center; gap: 4px;
+    font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text);
+    cursor: pointer; padding: 2px 6px; border: 1px solid var(--border); border-radius: 2px; transition: all 0.15s;
+}
+.pair-check:hover { border-color: var(--accent); }
+.pair-check input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }

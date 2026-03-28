@@ -1,0 +1,28 @@
+{
+  "exchange_balances": {
+    "binance": 10000,
+    "coinbase": 5000,
+    "kraken": 2500,
+    "bybit": 5000,
+    "okx": 3000,
+    "gateio": 2000
+  },
+  "enabled_pairs": [
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT",
+    "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT",
+    "LINKUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "XLMUSDT",
+    "ETCUSDT", "FILUSDT", "NEARUSDT", "TRXUSDT", "MANAUSDT",
+    "AAVEUSDT", "LRCUSDT", "ENJUSDT", "GALAUSDT", "APEUSDT",
+    "SHIBUSDT", "KAVAUSDT", "KSMUSDT", "ZECUSDT", "XMRUSDT",
+    "XTZUSDT", "EOSUSDT", "ALGOUSDT", "VETUSDT", "THETAUSDT",
+    "FTMUSDT", "MKRUSDT", "COMPUSDT", "SNXUSDT", "YFIUSDT",
+    "SUSHIUSDT", "CRVUSDT", "LDOUSDT", "GMXUSDT", "RUNEUSDT",
+    "SANDUSDT", "CHZUSDT", "AXSUSDT", "INCHUSDT", "BTCUSDC"
+  ],
+  "min_profit_pct": 0.05,
+  "telegram_enabled": true,
+  "max_exposure_per_pair": {
+    "BTCUSDT": 1.0,
+    "ETHUSDT": 10.0
+  }
+}

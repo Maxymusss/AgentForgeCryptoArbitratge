@@ -159,29 +159,29 @@ async def price_fetch_loop():
                 for o in opps:
                     try:
                         profit = getattr(o, "profit_pct", None)
-                        if profit is not None and profit > 0:
-                            buy_ex = getattr(o, "buy_exchange", "")
-                            sell_ex = getattr(o, "sell_exchange", "")
-                            buy_ex_cfg = CONFIG.exchanges.get(buy_ex.lower())
-                            sell_ex_cfg = CONFIG.exchanges.get(sell_ex.lower())
-                            buy_fee = round(buy_ex_cfg.fees.taker_pct * 100, 4) if buy_ex_cfg else 0
-                            sell_fee = round(sell_ex_cfg.fees.taker_pct * 100, 4) if sell_ex_cfg else 0
-                            arb_opps.append({
-                                "buy_exchange": buy_ex,
-                                "sell_exchange": sell_ex,
-                                "pair": getattr(o, "pair", pair),
-                                "buy_price": getattr(o, "buy_price", 0),
-                                "sell_price": getattr(o, "sell_price", 0),
-                                "raw_spread_pct": getattr(o, "raw_spread_pct", 0),
-                                "profit_pct": profit,
-                                "volume_score": round(getattr(o, "volume_score", 50.0), 1),
-                                "min_order_amount": getattr(o, "min_order_amount", None),
-                                "buy_fee_pct": round(buy_fee, 4),
-                                "sell_fee_pct": round(sell_fee, 4),
-                            })
-                            # Fire Telegram alert if profit exceeds threshold
-                            if profit >= CONFIG.min_profit_pct:
-                                _send_telegram_alert(o)
+                        buy_ex = getattr(o, "buy_exchange", "")
+                        sell_ex = getattr(o, "sell_exchange", "")
+                        buy_ex_cfg = CONFIG.exchanges.get(buy_ex.lower())
+                        sell_ex_cfg = CONFIG.exchanges.get(sell_ex.lower())
+                        buy_fee = round(buy_ex_cfg.fees.taker_pct * 100, 4) if buy_ex_cfg else 0
+                        sell_fee = round(sell_ex_cfg.fees.taker_pct * 100, 4) if sell_ex_cfg else 0
+                        total_fees = buy_fee + sell_fee
+                        raw_spread = getattr(o, "raw_spread_pct", 0)
+                        arb_opps.append({
+                            "buy_exchange": buy_ex,
+                            "sell_exchange": sell_ex,
+                            "pair": getattr(o, "pair", pair),
+                            "buy_price": getattr(o, "buy_price", 0),
+                            "sell_price": getattr(o, "sell_price", 0),
+                            "raw_spread_pct": raw_spread,
+                            "profit_pct": profit if profit is not None else 0,
+                            "total_fees_pct": round(total_fees, 4),
+                            "buy_fee_pct": round(buy_fee, 4),
+                            "sell_fee_pct": round(sell_fee, 4),
+                        })
+                        # Fire Telegram alert if profit exceeds threshold
+                        if profit is not None and profit >= CONFIG.min_profit_pct:
+                            _send_telegram_alert(o)
                     except Exception:
                         pass
 
@@ -210,7 +210,7 @@ async def startup():
 
 @app.get("/")
 async def root():
-    with open(_TEMPLATE_DIR / "dashboard.html") as f:
+    with open(_TEMPLATE_DIR / "dashboard.html", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 
@@ -267,7 +267,36 @@ async def update_settings(body: dict):
     return {"ok": True}
 
 
+@app.get("/api/balances")
+async def get_balances():
+    """Return current exchange balances."""
+    from ..config import CONFIG as _cfg
+    return _cfg.exchange_balances
+
+
+@app.post("/api/balances")
+async def update_balances(body: dict):
+    """Update exchange balances (mock)."""
+    from ..config import CONFIG as _cfg, _load_settings, _save_settings
+    settings = _load_settings()
+    balances = body.get("balances", {})
+    # Validate: must be numeric and >= 0
+    cleaned = {}
+    for ex, val in balances.items():
+        try:
+            v = float(val)
+            if v < 0:
+                v = 0.0
+            cleaned[str(ex)] = round(v, 2)
+        except (TypeError, ValueError):
+            pass
+    settings["exchange_balances"] = cleaned
+    _cfg._settings["exchange_balances"] = cleaned
+    _save_settings(settings)
+    return {"ok": True, "balances": cleaned}
+
+
 @app.get("/settings")
 async def settings_page():
-    with open(_TEMPLATE_DIR / "settings.html") as f:
+    with open(_TEMPLATE_DIR / "settings.html", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
