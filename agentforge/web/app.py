@@ -160,14 +160,24 @@ async def price_fetch_loop():
                     try:
                         profit = getattr(o, "profit_pct", None)
                         if profit is not None and profit > 0:
+                            buy_ex = getattr(o, "buy_exchange", "")
+                            sell_ex = getattr(o, "sell_exchange", "")
+                            buy_ex_cfg = CONFIG.exchanges.get(buy_ex.lower())
+                            sell_ex_cfg = CONFIG.exchanges.get(sell_ex.lower())
+                            buy_fee = round(buy_ex_cfg.fees.taker_pct * 100, 4) if buy_ex_cfg else 0
+                            sell_fee = round(sell_ex_cfg.fees.taker_pct * 100, 4) if sell_ex_cfg else 0
                             arb_opps.append({
-                                "buy_exchange": getattr(o, "buy_exchange", ""),
-                                "sell_exchange": getattr(o, "sell_exchange", ""),
+                                "buy_exchange": buy_ex,
+                                "sell_exchange": sell_ex,
                                 "pair": getattr(o, "pair", pair),
                                 "buy_price": getattr(o, "buy_price", 0),
                                 "sell_price": getattr(o, "sell_price", 0),
                                 "raw_spread_pct": getattr(o, "raw_spread_pct", 0),
                                 "profit_pct": profit,
+                                "volume_score": round(getattr(o, "volume_score", 50.0), 1),
+                                "min_order_amount": getattr(o, "min_order_amount", None),
+                                "buy_fee_pct": round(buy_fee, 4),
+                                "sell_fee_pct": round(sell_fee, 4),
                             })
                             # Fire Telegram alert if profit exceeds threshold
                             if profit >= CONFIG.min_profit_pct:
@@ -214,3 +224,50 @@ async def websocket_prices(websocket: WebSocket):
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+
+# ─── Settings API ─────────────────────────────────────────────────────────────
+
+@app.get("/api/settings")
+async def get_settings():
+    """Return current settings (public fields only)."""
+    from ..config import CONFIG as _cfg
+    return {
+        "min_profit_pct": _cfg.min_profit_pct,
+        "telegram_enabled": _cfg.telegram_enabled,
+        "poll_interval": _cfg.poll_interval,
+        "enabled_exchanges": [e.value for e in _ENABLED_EXCHANGES],
+        "all_exchanges": [e.value for e in Exchange],
+    }
+
+
+@app.post("/api/settings")
+async def update_settings(body: dict):
+    """Update settings — writes to settings.json and reloads CONFIG._settings."""
+    from ..config import CONFIG as _cfg, _load_settings, _save_settings
+    settings = _load_settings()
+    changed = False
+    if "min_profit_pct" in body:
+        v = float(body["min_profit_pct"])
+        settings["min_profit_pct"] = v
+        _cfg._settings["min_profit_pct"] = v
+        changed = True
+    if "telegram_enabled" in body:
+        v = bool(body["telegram_enabled"])
+        settings["telegram_enabled"] = v
+        _cfg._settings["telegram_enabled"] = v
+        changed = True
+    if "poll_interval" in body:
+        v = int(body["poll_interval"])
+        settings["poll_interval"] = v
+        _cfg.poll_interval = v
+        changed = True
+    if changed:
+        _save_settings(settings)
+    return {"ok": True}
+
+
+@app.get("/settings")
+async def settings_page():
+    with open(_TEMPLATE_DIR / "settings.html") as f:
+        return HTMLResponse(content=f.read())

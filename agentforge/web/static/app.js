@@ -136,7 +136,8 @@ function renderPriceGrid() {
 }
 
 // ─── Arbitrage list: top 10 by spread ───────────────────────────────────────────
-// Buy at lowest ASK → sell at highest BID (executable)
+// Uses enriched opportunity data from backend WebSocket: volume_score, min_order,
+// and per-exchange fee breakdown.
 
 function renderArbList() {
     const list = $('arb-list');
@@ -147,35 +148,14 @@ function renderArbList() {
 
     for (const pair of Object.keys(state)) {
         const data = state[pair];
-        if (!data || !data.prices) continue;
-
-        const { prices } = data;
-
-        const allAsks = EXCHANGES.map(ex => ({ ex, ask: prices[ex]?.ask })).filter(x => x.ask != null && x.ask !== 0 && !Number.isNaN(x.ask));
-        const allBids = EXCHANGES.map(ex => ({ ex, bid: prices[ex]?.bid })).filter(x => x.bid != null && x.bid !== 0 && !Number.isNaN(x.bid));
-
-        if (!allAsks.length || !allBids.length) continue;
-
-        const lowestAsk = allAsks.reduce((a, b) => a.ask < b.ask ? a : b);
-        const highestBid = allBids.reduce((a, b) => a.bid > b.bid ? a : b);
-        if (lowestAsk.ex === highestBid.ex) continue;
-
-        const gross = highestBid.bid - lowestAsk.ask;
-        const grossPct = (gross / lowestAsk.ask) * 100;
-        const netPct = grossPct - 0.20; // ~0.1% + 0.1% in fees
-
-        rows.push({
-            pair,
-            buy_ex: lowestAsk.ex,
-            sell_ex: highestBid.ex,
-            buy_price: lowestAsk.ask,
-            sell_price: highestBid.bid,
-            grossPct,
-            netPct,
-        });
+        if (!data || !data.opportunities) continue;
+        for (const opp of data.opportunities) {
+            if (!opp.raw_spread_pct && opp.raw_spread_pct !== 0) continue;
+            rows.push(opp);
+        }
     }
 
-    rows.sort((a, b) => b.grossPct - a.grossPct);
+    rows.sort((a, b) => b.raw_spread_pct - a.raw_spread_pct);
     const top10 = rows.slice(0, 10);
 
     countBadge.textContent = top10.length;
@@ -191,13 +171,21 @@ function renderArbList() {
 
     for (const opp of top10) {
         const card = document.createElement('div');
-        card.className = 'arb-card' + (opp.grossPct > 0.05 ? ' high' : '');
+        const isHigh = (opp.profit_pct || 0) > 0.05;
+        card.className = 'arb-card' + (isHigh ? ' high' : '');
+        const grossPct = opp.raw_spread_pct || 0;
+        const buyFee = opp.buy_fee_pct || 0;
+        const sellFee = opp.sell_fee_pct || 0;
+        const totalFees = buyFee + sellFee;
+        const minAmt = opp.min_order_amount != null ? fmt(opp.min_order_amount) : '—';
+        const volScore = opp.volume_score != null ? opp.volume_score : 50;
+
         card.innerHTML = `
             <div class="arb-pair">${opp.pair}</div>
             <div class="arb-flow">
-                <a class="arb-exchange" style="background:${exColor(opp.buy_ex)}" href="${exTradeUrl(opp.buy_ex, opp.pair)}" target="_blank" rel="noopener">${exLabel(opp.buy_ex)} ASK ↗</a>
+                <a class="arb-exchange" style="background:${exColor(opp.buy_exchange)}" href="${exTradeUrl(opp.buy_exchange, opp.pair)}" target="_blank" rel="noopener">${exLabel(opp.buy_exchange)} ASK ↗</a>
                 <span class="arb-arrow">→</span>
-                <a class="arb-exchange" style="background:${exColor(opp.sell_ex)}" href="${exTradeUrl(opp.sell_ex, opp.pair)}" target="_blank" rel="noopener">${exLabel(opp.sell_ex)} BID ↗</a>
+                <a class="arb-exchange" style="background:${exColor(opp.sell_exchange)}" href="${exTradeUrl(opp.sell_exchange, opp.pair)}" target="_blank" rel="noopener">${exLabel(opp.sell_exchange)} BID ↗</a>
             </div>
             <div class="arb-prices">
                 <span class="ask-price">${fmt(opp.buy_price)} ASK</span>
@@ -206,18 +194,31 @@ function renderArbList() {
             <div class="arb-metrics">
                 <div class="metric">
                     <span class="metric-label">SPREAD</span>
-                    <span class="metric-value spread">+${opp.grossPct.toFixed(4)}%</span>
+                    <span class="metric-value spread">+${grossPct.toFixed(4)}%</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">NET PROFIT</span>
-                    <span class="metric-value profit">${opp.netPct >= 0 ? '+' : ''}${opp.netPct.toFixed(4)}%</span>
+                    <span class="metric-value profit">${(opp.profit_pct || 0) >= 0 ? '+' : ''}${(opp.profit_pct || 0).toFixed(4)}%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">FEES</span>
+                    <span class="metric-value" style="color:var(--warn)">−${totalFees.toFixed(4)}%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">MIN ORDER</span>
+                    <span class="metric-value">${minAmt}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">VOL SCORE</span>
+                    <span class="metric-value">${volScore}/100</span>
                 </div>
             </div>
+            <div class="fee-detail">Buy fee: ${buyFee.toFixed(4)}% · Sell fee: ${sellFee.toFixed(4)}%</div>
         `;
         list.appendChild(card);
     }
 
-    if (top10.length) bestSpread = top10[0].grossPct;
+    if (top10.length) bestSpread = top10[0].raw_spread_pct;
 }
 
 // ─── Stats ──────────────────────────────────────────────────────────────────

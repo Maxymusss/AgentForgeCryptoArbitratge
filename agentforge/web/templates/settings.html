@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentForge — Settings</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .settings-body { max-width: 640px; margin: 40px auto; padding: 0 24px; }
+        .settings-card {
+            background: var(--bg-panel); border: 1px solid var(--border);
+            border-radius: 4px; overflow: hidden; margin-bottom: 20px;
+        }
+        .settings-card-header {
+            padding: 14px 20px; background: rgba(0,240,255,0.04);
+            border-bottom: 1px solid var(--border);
+            font-family: 'Share Tech Mono', monospace; font-size: 12px;
+            letter-spacing: 2px; color: var(--accent);
+        }
+        .settings-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid rgba(26,39,68,0.4);
+        }
+        .settings-row:last-child { border-bottom: none; }
+        .settings-label { font-size: 14px; font-weight: 600; }
+        .settings-desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+        .settings-control { display: flex; align-items: center; gap: 10px; }
+        input[type="range"] { width: 160px; accent-color: var(--accent); cursor: pointer; }
+        input[type="number"] {
+            background: var(--bg-card); border: 1px solid var(--border);
+            color: var(--text); padding: 6px 10px; border-radius: 3px;
+            font-family: 'Share Tech Mono', monospace; width: 80px;
+        }
+        .toggle-wrap { position: relative; }
+        .toggle {
+            width: 44px; height: 22px; background: var(--border);
+            border-radius: 11px; cursor: pointer; transition: background 0.2s;
+            position: relative;
+        }
+        .toggle.on { background: var(--profit); }
+        .toggle::after {
+            content: ''; position: absolute; top: 3px; left: 3px;
+            width: 16px; height: 16px; border-radius: 50%;
+            background: #fff; transition: left 0.2s;
+        }
+        .toggle.on::after { left: 25px; }
+        .btn-save {
+            background: var(--accent); color: #000; border: none;
+            padding: 10px 28px; border-radius: 3px; font-size: 13px;
+            font-weight: 700; cursor: pointer; letter-spacing: 1px;
+            font-family: 'Rajdhani', sans-serif;
+        }
+        .btn-save:hover { opacity: 0.85; }
+        .save-status { font-size: 12px; color: var(--profit); font-family: 'Share Tech Mono', monospace; }
+        .back-link {
+            display: inline-block; margin-bottom: 20px; color: var(--text-dim);
+            text-decoration: none; font-size: 12px; font-family: 'Share Tech Mono', monospace;
+        }
+        .back-link:hover { color: var(--accent); }
+        .exch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 16px 20px; }
+        .exch-item {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px;
+        }
+        .exch-item input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+        .profit-preview {
+            font-family: 'Share Tech Mono', monospace; font-size: 12px;
+            color: var(--accent); min-width: 60px; text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+    <header>
+        <div class="logo">
+            <span class="logo-icon">⚡</span>
+            <span class="logo-text">AGENTFORGE</span>
+            <span class="logo-sub">SETTINGS</span>
+        </div>
+    </header>
+
+    <div class="settings-body">
+        <a class="back-link" href="/">← Back to Dashboard</a>
+
+        <!-- Alert Threshold -->
+        <div class="settings-card">
+            <div class="settings-card-header">⚠️ ALERT THRESHOLD</div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Min Profit %</div>
+                    <div class="settings-desc">Fire alert when net profit exceeds this %</div>
+                </div>
+                <div class="settings-control">
+                    <input type="range" id="range-profit" min="0" max="2" step="0.005" value="0.05">
+                    <input type="number" id="input-profit" min="0" max="10" step="0.005" value="0.05">
+                    <span class="profit-preview" id="preview-profit">+0.050%</span>
+                </div>
+            </div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Poll Interval</div>
+                    <div class="settings-desc">How often to refresh prices (seconds)</div>
+                </div>
+                <div class="settings-control">
+                    <input type="number" id="input-interval" min="1" max="60" value="1">
+                    <span style="font-size:12px;color:var(--text-dim)">sec</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="settings-card">
+            <div class="settings-card-header">🔔 NOTIFICATIONS</div>
+            <div class="settings-row">
+                <div>
+                    <div class="settings-label">Telegram Alerts</div>
+                    <div class="settings-desc">Send alerts via Telegram bot when threshold is met</div>
+                </div>
+                <div class="toggle-wrap">
+                    <div class="toggle" id="toggle-telegram" onclick="toggleTelegram()"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Exchanges -->
+        <div class="settings-card">
+            <div class="settings-card-header">🔗 EXCHANGE LINKS (always shown in dashboard)</div>
+            <div class="exch-grid">
+                <div class="exch-item"><input type="checkbox" checked disabled> Binance</div>
+                <div class="exch-item"><input type="checkbox" checked disabled> Coinbase</div>
+                <div class="exch-item"><input type="checkbox" checked disabled> Kraken</div>
+                <div class="exch-item"><input type="checkbox" checked disabled> Bybit</div>
+                <div class="exch-item"><input type="checkbox" checked disabled> OKX</div>
+                <div class="exch-item"><input type="checkbox" checked disabled> Gate.io</div>
+            </div>
+        </div>
+
+        <!-- Save -->
+        <div style="display:flex;align-items:center;gap:16px;padding:8px 0">
+            <button class="btn-save" onclick="saveSettings()">SAVE SETTINGS</button>
+            <span class="save-status" id="save-status"></span>
+        </div>
+    </div>
+
+    <script>
+    const API = '/api/settings';
+    let current = {};
+
+    async function loadSettings() {
+        const r = await fetch(API);
+        current = await r.json();
+        document.getElementById('input-profit').value = current.min_profit_pct;
+        document.getElementById('range-profit').value = Math.min(current.min_profit_pct, 2);
+        document.getElementById('preview-profit').textContent = '+' + Number(current.min_profit_pct).toFixed(3) + '%';
+        document.getElementById('input-interval').value = current.poll_interval || 1;
+        const tg = document.getElementById('toggle-telegram');
+        if (current.telegram_enabled) tg.classList.add('on');
+        else tg.classList.remove('on');
+    }
+
+    function toggleTelegram() {
+        const tg = document.getElementById('toggle-telegram');
+        tg.classList.toggle('on');
+    }
+
+    document.getElementById('range-profit').addEventListener('input', function() {
+        const v = parseFloat(this.value);
+        document.getElementById('input-profit').value = v;
+        document.getElementById('preview-profit').textContent = '+' + v.toFixed(3) + '%';
+    });
+
+    document.getElementById('input-profit').addEventListener('input', function() {
+        const v = parseFloat(this.value);
+        document.getElementById('range-profit').value = Math.min(v, 2);
+        document.getElementById('preview-profit').textContent = '+' + v.toFixed(3) + '%';
+    });
+
+    async function saveSettings() {
+        const body = {
+            min_profit_pct: parseFloat(document.getElementById('input-profit').value),
+            telegram_enabled: document.getElementById('toggle-telegram').classList.contains('on'),
+            poll_interval: parseInt(document.getElementById('input-interval').value),
+        };
+        const r = await fetch(API, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const el = document.getElementById('save-status');
+        if (r.ok) {
+            el.textContent = '✓ SAVED — restart dashboard to apply poll interval';
+            setTimeout(() => el.textContent = '', 3000);
+        } else {
+            el.textContent = '✗ FAILED';
+        }
+    }
+
+    loadSettings();
+    </script>
+</body>
+</html>
