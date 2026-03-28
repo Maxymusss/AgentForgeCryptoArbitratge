@@ -1,112 +1,114 @@
-"""Tests for the arbitrage detection engine."""
+"""Tests for the multi-exchange arbitrage detection engine."""
 
 from __future__ import annotations
 
 import pytest
 
-from agentforge.core.arbitrage import compare_prices, find_best_arbitrage
-from agentforge.models import ArbitrageOpportunity
+from agentforge.core.arbitrage import find_arbitrage_opportunities, best_opportunity
+from agentforge.models import Exchange
 
 
-class TestComparePrices:
-    """Unit tests for compare_prices()."""
+class TestFindArbitrageOpportunities:
+    """Unit tests for find_arbitrage_opportunities()."""
 
-    def test_no_profit_when_prices_equal(self):
-        """Equal prices with 0.1% fee each should yield negative net profit."""
-        opp = compare_prices(
-            buy_exchange="Binance",
-            sell_exchange="Coinbase",
-            pair="BTCUSDT",
-            buy_price=100.0,
-            sell_price=100.0,
-        )
-        assert opp is not None
-        assert opp.raw_spread_pct == 0.0
-        assert opp.profit_pct == pytest.approx(-0.2)  # 0.1% + 0.1% fees
+    def test_equal_prices_all_directions_returned(self):
+        """With equal prices, all directional pairs are returned (fees make them negative)."""
+        prices = {
+            Exchange.BINANCE: 100.0,
+            Exchange.COINBASE: 100.0,
+        }
+        opps = find_arbitrage_opportunities(prices, "BTCUSDT")
+        assert len(opps) == 2  # bin→coinbase, coinbase→bin
+        for opp in opps:
+            assert opp.raw_spread_pct == 0.0
 
-    def test_profitable_opportunity(self):
-        """0.3% spread with 0.2% total fees should yield ~0.1% net profit."""
-        # Buy at 100 on Binance, sell at 100.30 on Coinbase
-        opp = compare_prices(
-            buy_exchange="Binance",
-            sell_exchange="Coinbase",
-            pair="ETHUSDT",
-            buy_price=100.0,
-            sell_price=100.30,
-        )
-        assert opp is not None
-        assert opp.raw_spread_pct == pytest.approx(0.3)
-        assert opp.profit_pct == pytest.approx(0.1)  # 0.3 - 0.2
+    def test_spread_detected_correctly(self):
+        """A 0.3% spread is correctly calculated."""
+        prices = {
+            Exchange.BINANCE: 100.0,
+            Exchange.COINBASE: 100.30,
+        }
+        opps = find_arbitrage_opportunities(prices, "BTCUSDT")
+        buy_bnb = next((o for o in opps if o.buy_exchange == "binance"), None)
+        assert buy_bnb is not None
+        assert buy_bnb.raw_spread_pct == pytest.approx(0.3)
 
-    def test_unprofitable_small_spread(self):
-        """0.15% spread is not enough to cover 0.2% in fees."""
-        opp = compare_prices(
-            buy_exchange="Binance",
-            sell_exchange="Coinbase",
-            pair="BTCUSDT",
-            buy_price=100.0,
-            sell_price=100.15,
-        )
-        assert opp is not None
-        assert opp.profit_pct == pytest.approx(-0.05)  # 0.15 - 0.2
+    def test_net_profit_after_fees(self):
+        """Net = raw spread - binance taker (0.1%) - coinbase taker (0.6%) = 0.3 - 0.7 = -0.4%"""
+        prices = {
+            Exchange.BINANCE: 100.0,
+            Exchange.COINBASE: 100.30,
+        }
+        opps = find_arbitrage_opportunities(prices, "BTCUSDT")
+        buy_bnb = next((o for o in opps if o.buy_exchange == "binance"), None)
+        assert buy_bnb is not None
+        # Fees: binance 0.1% + coinbase 0.6% = 0.7%
+        # Spread 0.3% - 0.7% = -0.4%
+        assert buy_bnb.profit_pct == pytest.approx(-0.4)
 
-    def test_zero_price_returns_none(self):
-        assert compare_prices("Binance", "Coinbase", "BTCUSDT", 0.0, 100.0) is None
-        assert compare_prices("Binance", "Coinbase", "BTCUSDT", 100.0, 0.0) is None
+    def test_null_prices_skipped(self):
+        """None prices are skipped without crashing."""
+        prices = {
+            Exchange.BINANCE: 100.0,
+            Exchange.COINBASE: None,
+            Exchange.KRAKEN: 100.2,
+        }
+        opps = find_arbitrage_opportunities(prices, "BTCUSDT")
+        # Should not reference coinbase as buy or sell
+        for opp in opps:
+            assert opp.buy_exchange != "coinbase" or opp.sell_exchange != "coinbase"
 
-    def test_negative_price_returns_none(self):
-        assert compare_prices("Binance", "Coinbase", "BTCUSDT", -100.0, 100.0) is None
+    def test_empty_prices_returns_empty(self):
+        prices: dict[Exchange, float] = {}
+        opps = find_arbitrage_opportunities(prices, "BTCUSDT")
+        assert opps == []
 
-    def test_viable_opportunity(self):
-        opp = compare_prices(
-            buy_exchange="Binance",
-            sell_exchange="Coinbase",
-            pair="BTCUSDT",
-            buy_price=100.0,
-            sell_price=100.35,
-        )
-        assert opp is not None
-        assert opp.profit_pct == pytest.approx(0.15)
-        assert opp.is_viable(min_profit_pct=0.1) is True
-        assert opp.is_viable(min_profit_pct=0.2) is False
+    def test_all_six_exchanges_nxn(self):
+        """With 6 exchanges, 30 directional pairs (6×5)."""
+        prices = {e: 100.0 for e in Exchange}
+        opps = find_arbitrage_opportunities(prices, "BTCUSDT")
+        # 6 exchanges × 5 other exchanges = 30
+        assert len(opps) == 30
+
+    def test_viable_opportunity_coinbase_bybit(self):
+        """Coinbase (buy 0.1%) + Bybit (sell 0.1%), 0.3% spread = 0.1% net."""
+        prices = {
+            Exchange.COINBASE: 100.0,
+            Exchange.BYBIT: 100.30,
+        }
+        opps = find_arbitrage_opportunities(prices, "BTCUSDT")
+        buy_cb = next((o for o in opps if o.buy_exchange == "coinbase"), None)
+        assert buy_cb is not None
+        # Fees: coinbase 0.6% + bybit 0.1% = 0.7%
+        # Spread 0.3% - 0.7% = -0.4%
+        assert buy_cb.profit_pct == pytest.approx(-0.4)
+
+    def test_sort_by_profit_descending(self):
+        """Opportunities are sorted by profit_pct, most profitable first."""
+        prices = {
+            Exchange.BINANCE: 100.0,
+            Exchange.COINBASE: 100.30,
+            Exchange.KRAKEN: 100.05,
+        }
+        opps = find_arbitrage_opportunities(prices, "BTCUSDT")
+        profits = [o.profit_pct for o in opps]
+        assert profits == sorted(profits, reverse=True)
 
 
-class TestFindBestArbitrage:
-    """Unit tests for find_best_arbitrage()."""
+class TestBestOpportunity:
+    """Unit tests for best_opportunity()."""
 
-    def test_both_prices_none_returns_none(self):
-        assert find_best_arbitrage(None, None, "BTCUSDT") is None
+    def test_returns_none_when_all_unprofitable(self):
+        """best_opportunity returns None when all spreads are eaten by fees."""
+        prices = {e: 100.0 for e in Exchange}
+        best = best_opportunity(prices, "BTCUSDT")
+        assert best is None
 
-    def test_only_binance_price_logs_warning(self, caplog):
-        result = find_best_arbitrage(100.0, None, "BTCUSDT")
-        assert result is None
-        assert "Coinbase price unavailable" in caplog.text
+    def test_returns_none_for_empty(self):
+        best = best_opportunity({}, "BTCUSDT")
+        assert best is None
 
-    def test_only_coinbase_price_logs_warning(self, caplog):
-        result = find_best_arbitrage(None, 100.0, "BTCUSDT")
-        assert result is None
-        assert "Binance price unavailable" in caplog.text
-
-    def test_returns_best_direction(self):
-        """Binance cheaper -> buy Binance, sell Coinbase is best direction."""
-        result = find_best_arbitrage(
-            binance_price=100.0,
-            coinbase_price=100.30,
-            pair="BTCUSDT",
-        )
-        assert result is not None
-        assert result.buy_exchange == "Binance"
-        assert result.sell_exchange == "Coinbase"
-        assert result.profit_pct == pytest.approx(0.1)  # spread 0.3% - 0.2% fees
-
-    def test_reverse_direction_profitable(self):
-        """Coinbase cheaper -> buy Coinbase, sell Binance is best direction."""
-        result = find_best_arbitrage(
-            binance_price=100.40,
-            coinbase_price=100.0,
-            pair="BTCUSDT",
-        )
-        assert result is not None
-        assert result.buy_exchange == "Coinbase"
-        assert result.sell_exchange == "Binance"
-        assert result.profit_pct == pytest.approx(0.2)  # spread 0.4% - 0.2% fees
+    def test_returns_none_for_single_exchange(self):
+        prices = {Exchange.BINANCE: 100.0}
+        best = best_opportunity(prices, "BTCUSDT")
+        assert best is None

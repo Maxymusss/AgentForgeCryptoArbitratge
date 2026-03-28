@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentForge — Arbitrage Scanner</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="scanline"></div>
+
+    <header>
+        <div class="logo">
+            <span class="logo-icon">⚡</span>
+            <span class="logo-text">AGENTFORGE</span>
+            <span class="logo-sub">ARBITRAGE SCANNER</span>
+        </div>
+        <div class="status-bar">
+            <span class="status-dot" id="ws-status">
+                <span class="dot"></span>
+                <span class="dot-label">DISCONNECTED</span>
+            </span>
+            <span class="clock" id="clock">--:--:--</span>
+        </div>
+    </header>
+
+    <div class="main-grid">
+        <!-- PRICE MATRIX -->
+        <section class="panel price-matrix">
+            <div class="panel-header">
+                <span class="panel-icon">📡</span>
+                LIVE PRICE MATRIX
+            </div>
+            <div class="panel-body">
+                <div id="price-grid" class="grid-container">
+                    <div class="grid-header">
+                        <span>PAIR</span>
+                        <span class="binance">BINANCE</span>
+                        <span class="coinbase">COINBASE</span>
+                        <span class="kraken">KRAKEN</span>
+                        <span class="bybit">BYBIT</span>
+                        <span class="okx">OKX</span>
+                        <span class="gateio">GATE</span>
+                        <span>SPREAD</span>
+                    </div>
+                    <div id="price-rows"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ARBITRAGE OPPORTUNITIES -->
+        <section class="panel arbitrage-panel">
+            <div class="panel-header">
+                <span class="panel-icon">💰</span>
+                ARBITRAGE OPPORTUNITIES
+                <span class="badge" id="opp-count">0</span>
+            </div>
+            <div class="panel-body">
+                <div id="arb-list" class="arb-list"></div>
+                <div id="no-opps" class="no-opps">
+                    <span class="pulse-ring">◎</span>
+                    Scanning for opportunities...
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- TOP BAR -->
+    <div class="stats-bar">
+        <div class="stat">
+            <span class="stat-label">EXCHANGES</span>
+            <span class="stat-value" id="stat-exchanges">6</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">PAIRS</span>
+            <span class="stat-value" id="stat-pairs">0</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">BEST SPREAD</span>
+            <span class="stat-value" id="stat-best-spread">—</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">BEST PROFIT</span>
+            <span class="stat-value profit" id="stat-best-profit">—</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">LAST UPDATE</span>
+            <span class="stat-value" id="stat-last">—</span>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

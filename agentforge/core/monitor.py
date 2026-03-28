@@ -1,141 +1,124 @@
-"""Real-time price monitor — polls exchanges and detects arbitrage opportunities."""
+"""Async multi-exchange monitor — polls all exchanges concurrently and emits opportunities."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import signal
-import sys
 import time
+from datetime import datetime, timezone
 from typing import Callable
 
-from rich.console import Console
-from rich.table import Table
+import httpx
 
 from ..config import CONFIG
-from ..exchanges import binance, coinbase
+from ..exchanges import (
+    binance_fetch,
+    coinbase_fetch,
+    kraken_fetch,
+    bybit_fetch,
+    okx_fetch,
+    gateio_fetch,
+    Exchange,
+)
 from ..models import ArbitrageOpportunity
-from .arbitrage import find_best_arbitrage
+from .arbitrage import find_arbitrage_opportunities
 
 logger = logging.getLogger(__name__)
-console = Console()
 
-# Flag to handle graceful shutdown
-_running = True
+# Map Exchange → fetch function
+_EXCHANGE_FETCHERS: dict[Exchange, Callable[[str], float | None]] = {
+    Exchange.BINANCE:  binance_fetch,
+    Exchange.COINBASE: coinbase_fetch,
+    Exchange.KRAKEN:   kraken_fetch,
+    Exchange.BYBIT:   bybit_fetch,
+    Exchange.OKX:     okx_fetch,
+    Exchange.GATEIO:  gateio_fetch,
+}
 
 
-def _signal_handler(signum: int, frame) -> None:
-    global _running
-    logger.info("Shutdown signal received — stopping monitor...")
-    _running = False
+async def fetch_all_prices(
+    pair: str,
+    exchanges: list[Exchange],
+) -> dict[Exchange, float | None]:
+    """Fetch prices from all exchanges concurrently using httpx async client.
+
+    Args:
+        pair: Binance-style symbol (e.g. "BTCUSDT").
+        exchanges: List of exchanges to query.
+
+    Returns:
+        Dict mapping Exchange → price (or None if fetch failed).
+    """
+    async def fetch_one(exchange: Exchange) -> tuple[Exchange, float | None]:
+        fetcher = _EXCHANGE_FETCHERS.get(exchange)
+        if fetcher is None:
+            return exchange, None
+        # Run sync fetchers in thread pool (they use requests, not async)
+        loop = asyncio.get_running_loop()
+        price = await loop.run_in_executor(None, fetcher, pair)
+        return exchange, price
+
+    results = await asyncio.gather(*(fetch_one(ex) for ex in exchanges))
+    return dict(results)
 
 
-def monitor(
-    pairs: tuple[str, ...] | None = None,
+async def monitor_loop(
+    pairs: list[str],
     interval: int | None = None,
     min_profit_pct: float | None = None,
     on_opportunity: Callable[[ArbitrageOpportunity], None] | None = None,
+    enabled_exchanges: list[Exchange] | None = None,
 ) -> None:
     """Run the arbitrage monitoring loop.
 
     Args:
-        pairs:          Trading pairs to monitor. Defaults to CONFIG.trading_pairs.
-        interval:       Poll interval in seconds. Defaults to CONFIG.poll_interval.
-        min_profit_pct: Minimum net profit % to flag. Defaults to CONFIG.min_profit_pct.
-        on_opportunity: Optional callback for each detected opportunity.
+        pairs: List of trading pairs to monitor.
+        interval: Poll interval in seconds.
+        min_profit_pct: Minimum net profit % to flag.
+        on_opportunity: Callback for each detected opportunity.
+        enabled_exchanges: Which exchanges to query.
     """
-    global _running
-    _running = True
-
-    # Handle Ctrl+C / SIGINT gracefully
-    signal.signal(signal.SIGINT, _signal_handler)
-
-    pairs = pairs or CONFIG.trading_pairs
     interval = interval or CONFIG.poll_interval
     min_profit = min_profit_pct if min_profit_pct is not None else CONFIG.min_profit_pct
+    enabled = enabled_exchanges or [e for e in Exchange if CONFIG.exchanges.get(e.value, None)]
 
-    console.print(f"\n🚀 [bold cyan]AgentForge Arbitrage Monitor[/bold cyan]")
-    console.print(f"   Pairs:     {', '.join(pairs)}")
-    console.print(f"   Interval:  {interval}s")
-    console.print(f"   Min profit: {min_profit}%\n")
-
-    header_printed = False
     iteration = 0
+    running = True
 
-    while _running:
+    def stop():
+        nonlocal running
+        running = False
+
+    # Handle Ctrl+C
+    try:
+        signal.signal(signal.SIGINT, lambda *_: stop())
+    except Exception:
+        pass
+
+    while running:
         iteration += 1
-        timestamp = time.strftime("%H:%M:%S")
+        timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
 
-        table = Table(title=f"Arbitrage Scan #{iteration} — {timestamp}")
-        table.add_column("Pair", style="cyan")
-        table.add_column("Binance", justify="right", style="yellow")
-        table.add_column("Coinbase", justify="right", style="magenta")
-        table.add_column("Best Direction", style="green")
-        table.add_column("Net Profit %", justify="right")
-        table.add_column("Status", justify="center")
+        all_opportunities: list[ArbitrageOpportunity] = []
 
-        found_viable = False
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for pair in pairs:
+                prices = await fetch_all_prices(pair, enabled)
+                opps = find_arbitrage_opportunities(prices, pair)
 
-        for pair in pairs:
-            binance_price = binance.fetch_price(pair)
-            coinbase_price = coinbase.fetch_price(pair)
+                # Filter to only viable ones
+                viable = [o for o in opps if o.is_viable(min_profit)]
+                all_opportunities.extend(viable)
 
-            if binance_price is None and coinbase_price is None:
-                table.add_row(
-                    pair,
-                    "[red]ERR[/red]",
-                    "[red]ERR[/red]",
-                    "—",
-                    "—",
-                    "[red]NO DATA[/red]",
-                )
-                continue
+        # Sort all across pairs by profit
+        all_opportunities.sort(key=lambda o: o.profit_pct, reverse=True)
 
-            best = find_best_arbitrage(binance_price, coinbase_price, pair)
+        # Emit top opportunities
+        if all_opportunities and on_opportunity:
+            for opp in all_opportunities[:5]:  # top 5
+                on_opportunity(opp)
 
-            if best:
-                direction = f"{best.buy_exchange} → {best.sell_exchange}"
-                profit_str = f"{best.profit_pct:+.4f}%"
+        await asyncio.sleep(interval)
 
-                if best.profit_pct >= min_profit:
-                    status = "[bold green]✅ VIABLE[/bold green]"
-                    found_viable = True
-                elif best.profit_pct > 0:
-                    status = "[yellow]⚠️  MARGINAL[/yellow]"
-                else:
-                    status = "[dim]❌ BELOW FEE[/dim]"
-
-                table.add_row(
-                    pair,
-                    f"{binance_price:,.4f}" if binance_price else "[dim]—[/dim]",
-                    f"{coinbase_price:,.4f}" if coinbase_price else "[dim]—[/dim]",
-                    direction,
-                    profit_str,
-                    status,
-                )
-
-                if best.is_viable(min_profit) and on_opportunity:
-                    on_opportunity(best)
-            else:
-                table.add_row(
-                    pair,
-                    f"{binance_price:,.4f}" if binance_price else "[dim]—[/dim]",
-                    f"{coinbase_price:,.4f}" if coinbase_price else "[dim]—[/dim]",
-                    "—",
-                    "—",
-                    "[dim]NO ARB[/dim]",
-                )
-
-        console.print(table)
-
-        if found_viable:
-            console.print(
-                "[bold green]💰 Viable opportunity detected! Check exchange balances and API limits before trading.[/bold green]\n"
-            )
-
-        # Sleep in small increments so we can exit quickly on signal
-        for _ in range(interval):
-            if not _running:
-                break
-            time.sleep(1)
-
-    console.print("\n[bold red]Monitor stopped.[/bold red]")
+    logger.info("Monitor stopped after %d iterations.", iteration)
