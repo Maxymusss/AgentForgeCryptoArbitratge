@@ -1,0 +1,1 @@
+"""Core arbitrage detection engine."""
