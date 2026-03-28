@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 
@@ -17,7 +17,7 @@ class ArbitrageOpportunity:
     sell_price: float     # Price received on sell exchange
     profit_pct: float      # Net profit percentage after fees
     raw_spread_pct: float # Gross spread before fees
-    volume_hint: float | None  # Approximate 24h volume (if available)
+    volume_hint: float | None = None  # Approximate 24h volume (if available)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def is_viable(self, min_profit_pct: float) -> bool:
