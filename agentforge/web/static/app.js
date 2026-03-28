@@ -268,7 +268,7 @@ function exTradeUrl(exchange, pair) {
         coinbase: `https://www.coinbase.com/trade/${base}-${quote}`,
         kraken:   `https://www.kraken.com/en-gb/prices/${base.toLowerCase()}`,
         bybit:    `https://www.bybit.com/trade/spot/${base}/${quote}`,
-        okx:      `https://www.okx.com/trade/spot/${base}-${quote}`,
+        okx:      `https://www.okx.com/singapore/trade/spot/${base}-${quote}`,
         gateio:   `https://www.gate.io/trade/${base.toLowerCase()}_${qGate.toLowerCase()}`,
     };
     return urls[exchange] || '#';
