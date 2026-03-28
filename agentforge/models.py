@@ -48,6 +48,8 @@ class ArbitrageOpportunity:
     profit_pct: float      # Net profit percentage after fees
     raw_spread_pct: float  # Gross spread before fees
     volume_hint: float | None = None
+    min_order_amount: float | None = None  # Minimum order size on the buy exchange
+    volume_score: float = 50.0             # Actionability score 0–100
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def is_viable(self, min_profit_pct: float) -> bool:
@@ -63,6 +65,21 @@ class ArbitrageOpportunity:
             f"Spread: {self.raw_spread_pct:+.4f}% | "
             f"Net: {self.profit_pct:+.4f}% | {self.timestamp:%H:%M:%S}"
         )
+
+    def to_dict(self) -> dict:
+        """Clean dictionary representation for web/API output."""
+        return {
+            "buy_exchange": self.buy_exchange,
+            "sell_exchange": self.sell_exchange,
+            "pair": self.pair,
+            "buy_price": self.buy_price,
+            "sell_price": self.sell_price,
+            "profit_pct": round(self.profit_pct, 4),
+            "raw_spread_pct": round(self.raw_spread_pct, 4),
+            "min_order_amount": self.min_order_amount,
+            "volume_score": round(self.volume_score, 1),
+            "timestamp": self.timestamp.isoformat(),
+        }
 
     def to_telegram(self) -> str:
         """Format for Telegram alert."""

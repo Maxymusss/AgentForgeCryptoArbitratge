@@ -1,11 +1,10 @@
-"""Async multi-exchange monitor — polls all exchanges concurrently and emits opportunities."""
+"""Async multi-exchange monitor — polls all exchanges concurrently using real bid/ask prices."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import signal
-import time
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -13,12 +12,12 @@ import httpx
 
 from ..config import CONFIG
 from ..exchanges import (
-    binance_fetch,
-    coinbase_fetch,
-    kraken_fetch,
-    bybit_fetch,
-    okx_fetch,
-    gateio_fetch,
+    binance_bid_ask,
+    coinbase_bid_ask,
+    kraken_bid_ask,
+    bybit_bid_ask,
+    okx_bid_ask,
+    gateio_bid_ask,
     Exchange,
 )
 from ..models import ArbitrageOpportunity
@@ -26,38 +25,40 @@ from .arbitrage import find_arbitrage_opportunities
 
 logger = logging.getLogger(__name__)
 
-# Map Exchange → fetch function
-_EXCHANGE_FETCHERS: dict[Exchange, Callable[[str], float | None]] = {
-    Exchange.BINANCE:  binance_fetch,
-    Exchange.COINBASE: coinbase_fetch,
-    Exchange.KRAKEN:   kraken_fetch,
-    Exchange.BYBIT:   bybit_fetch,
-    Exchange.OKX:     okx_fetch,
-    Exchange.GATEIO:  gateio_fetch,
+_EXCHANGE_FETCHERS = {
+    Exchange.BINANCE:  binance_bid_ask,
+    Exchange.COINBASE: coinbase_bid_ask,
+    Exchange.KRAKEN:   kraken_bid_ask,
+    Exchange.BYBIT:    bybit_bid_ask,
+    Exchange.OKX:      okx_bid_ask,
+    Exchange.GATEIO:   gateio_bid_ask,
 }
 
+# Semaphore to limit concurrent exchange requests (rate-limit protection)
+_CONCURRENCY_SEMAPHORE = asyncio.Semaphore(10)
 
-async def fetch_all_prices(
+
+async def fetch_all_bid_asks(
     pair: str,
     exchanges: list[Exchange],
-) -> dict[Exchange, float | None]:
-    """Fetch prices from all exchanges concurrently using httpx async client.
+) -> dict[Exchange, tuple[float | None, float | None]]:
+    """Fetch bid/ask prices from all exchanges concurrently.
 
     Args:
-        pair: Binance-style symbol (e.g. "BTCUSDT").
+        pair: Binance-style symbol.
         exchanges: List of exchanges to query.
 
     Returns:
-        Dict mapping Exchange → price (or None if fetch failed).
+        Dict mapping Exchange → (bid, ask).
     """
-    async def fetch_one(exchange: Exchange) -> tuple[Exchange, float | None]:
+    async def fetch_one(exchange: Exchange):
         fetcher = _EXCHANGE_FETCHERS.get(exchange)
         if fetcher is None:
-            return exchange, None
-        # Run sync fetchers in thread pool (they use requests, not async)
-        loop = asyncio.get_running_loop()
-        price = await loop.run_in_executor(None, fetcher, pair)
-        return exchange, price
+            return exchange, (None, None)
+        async with _CONCURRENCY_SEMAPHORE:
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, fetcher, pair)
+        return exchange, result
 
     results = await asyncio.gather(*(fetch_one(ex) for ex in exchanges))
     return dict(results)
@@ -69,19 +70,21 @@ async def monitor_loop(
     min_profit_pct: float | None = None,
     on_opportunity: Callable[[ArbitrageOpportunity], None] | None = None,
     enabled_exchanges: list[Exchange] | None = None,
+    telegram_enabled: bool = False,
+    max_results: int = 5,
 ) -> None:
-    """Run the arbitrage monitoring loop.
-
-    Args:
-        pairs: List of trading pairs to monitor.
-        interval: Poll interval in seconds.
-        min_profit_pct: Minimum net profit % to flag.
-        on_opportunity: Callback for each detected opportunity.
-        enabled_exchanges: Which exchanges to query.
-    """
     interval = interval or CONFIG.poll_interval
     min_profit = min_profit_pct if min_profit_pct is not None else CONFIG.min_profit_pct
-    enabled = enabled_exchanges or [e for e in Exchange if CONFIG.exchanges.get(e.value, None)]
+    enabled = enabled_exchanges or [e for e in Exchange if CONFIG.exchanges.get(e.value)]
+
+    # Lazy-import Telegram to avoid circular deps
+    telegram_alerts = None
+    if telegram_enabled:
+        try:
+            from ..alerts.telegram import send_opportunity as _telegram_send
+            telegram_alerts = _telegram_send
+        except Exception as exc:
+            logger.warning("Failed to load Telegram alerts: %s", exc)
 
     iteration = 0
     running = True
@@ -90,7 +93,6 @@ async def monitor_loop(
         nonlocal running
         running = False
 
-    # Handle Ctrl+C
     try:
         signal.signal(signal.SIGINT, lambda *_: stop())
     except Exception:
@@ -99,25 +101,23 @@ async def monitor_loop(
     while running:
         iteration += 1
         timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
-
         all_opportunities: list[ArbitrageOpportunity] = []
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             for pair in pairs:
-                prices = await fetch_all_prices(pair, enabled)
-                opps = find_arbitrage_opportunities(prices, pair)
-
-                # Filter to only viable ones
+                bid_asks = await fetch_all_bid_asks(pair, enabled)
+                opps = find_arbitrage_opportunities(bid_asks, pair)
                 viable = [o for o in opps if o.is_viable(min_profit)]
                 all_opportunities.extend(viable)
 
-        # Sort all across pairs by profit
         all_opportunities.sort(key=lambda o: o.profit_pct, reverse=True)
 
-        # Emit top opportunities
-        if all_opportunities and on_opportunity:
-            for opp in all_opportunities[:5]:  # top 5
-                on_opportunity(opp)
+        if all_opportunities:
+            for opp in all_opportunities[:max_results]:
+                if on_opportunity:
+                    on_opportunity(opp)
+                if telegram_alerts:
+                    telegram_alerts(opp)
 
         await asyncio.sleep(interval)
 

@@ -1,4 +1,4 @@
-"""OKX exchange connector — public REST API for spot prices."""
+"""OKX exchange connector — public REST API for spot bid/ask prices."""
 
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 _OKX_TICKER_URL = "https://www.okx.com/api/v5/market/ticker"
 
 
-def fetch_price(symbol: str) -> float | None:
-    """Fetch the current spot price for a symbol on OKX.
+def fetch_bid_ask(symbol: str) -> tuple[float | None, float | None]:
+    """Fetch the current bid and ask prices for a symbol on OKX.
 
     Args:
-        symbol: Binance-style symbol, e.g. "BTCUSDT" (converted internally to "BTC-USDT").
+        symbol: Binance-style symbol, e.g. "BTCUSDT".
 
     Returns:
-        Current price as a float, or None if the request fails.
+        (bid, ask) — either may be None if the request fails.
     """
     okx_symbol = normalize(symbol, Exchange.OKX)
     params = {"instId": okx_symbol}
@@ -33,20 +33,21 @@ def fetch_price(symbol: str) -> float | None:
 
         if data.get("code") != "0":
             logger.warning("OKX API error for %s: %s", okx_symbol, data.get("msg"))
-            return None
+            return None, None
 
         ticks = data.get("data", [])
         if not ticks:
-            logger.warning("OKX empty result for %s", okx_symbol)
-            return None
+            return None, None
 
-        price = float(ticks[0].get("last", 0))
-        logger.debug("OKX %s @ %s", okx_symbol, price)
-        return price if price > 0 else None
+        tick = ticks[0]
+        bid = float(tick.get("bidPx", 0)) or None
+        ask = float(tick.get("askPx", 0)) or None
+        logger.debug("OKX %s bid=%s ask=%s", okx_symbol, bid, ask)
+        return bid, ask
 
     except requests.RequestException as exc:
-        logger.warning("OKX price fetch failed for %s: %s", symbol, exc)
-        return None
+        logger.warning("OKX bid/ask fetch failed for %s: %s", symbol, exc)
+        return None, None
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("OKX unexpected response for %s: %s", symbol, exc)
-        return None
+        return None, None

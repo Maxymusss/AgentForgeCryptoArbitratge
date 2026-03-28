@@ -1,4 +1,4 @@
-"""Bybit exchange connector — public REST API for spot prices."""
+"""Bybit exchange connector — public REST API for spot bid/ask prices."""
 
 from __future__ import annotations
 
@@ -12,16 +12,15 @@ logger = logging.getLogger(__name__)
 _BYBIT_TICKER_URL = "https://api.bybit.com/v5/market/tickers"
 
 
-def fetch_price(symbol: str) -> float | None:
-    """Fetch the current spot price for a symbol on Bybit.
+def fetch_bid_ask(symbol: str) -> tuple[float | None, float | None]:
+    """Fetch the current bid and ask prices for a symbol on Bybit.
 
     Args:
-        symbol: Binance-style symbol, e.g. "BTCUSDT", "ETHUSDT".
+        symbol: Binance-style symbol, e.g. "BTCUSDT".
 
     Returns:
-        Current price as a float, or None if the request fails.
+        (bid, ask) — either may be None if the request fails.
     """
-    # Bybit uses category=spot for spot market tickers
     params: dict[str, str] = {
         "category": "spot",
         "symbol": symbol.upper(),
@@ -34,21 +33,21 @@ def fetch_price(symbol: str) -> float | None:
 
         if data.get("retMsg") != "OK":
             logger.warning("Bybit API error for %s: %s", symbol, data.get("retMsg"))
-            return None
+            return None, None
 
         list_data = data.get("result", {}).get("list", [])
         if not list_data:
-            logger.warning("Bybit empty result for %s", symbol)
-            return None
+            return None, None
 
         tick = list_data[0]
-        price = float(tick.get("lastPrice", 0))
-        logger.debug("Bybit %s @ %s", symbol, price)
-        return price if price > 0 else None
+        bid = float(tick.get("bid1Price", 0)) or None
+        ask = float(tick.get("ask1Price", 0)) or None
+        logger.debug("Bybit %s bid=%s ask=%s", symbol, bid, ask)
+        return bid, ask
 
     except requests.RequestException as exc:
-        logger.warning("Bybit price fetch failed for %s: %s", symbol, exc)
-        return None
+        logger.warning("Bybit bid/ask fetch failed for %s: %s", symbol, exc)
+        return None, None
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("Bybit unexpected response for %s: %s", symbol, exc)
-        return None
+        return None, None

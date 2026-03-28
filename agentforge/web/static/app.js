@@ -1,27 +1,23 @@
-// ─── AgentForge WebSocket Client ───────────────────────────────────────────
+// ─── AgentForge WebSocket Client — bid/ask version ─────────────────────────────────
 
 const WS_URL = `ws://${location.host}/ws/prices`;
 const EXCHANGES = ['binance', 'coinbase', 'kraken', 'bybit', 'okx', 'gateio'];
 
-// State
-let ws = null;
-let connected = false;
+// State: pair → { prices: { ex: { bid, ask } }, opps: [], timestamp }
+const state = {};
+const pairs = new Set();
 let tickCount = 0;
-let pairs = new Set();
-let bestProfit = null;
+let bestSpread = null;
 let lastUpdate = null;
-
-const state = {}; // pair → { prices: {}, opps: [], timestamp }
 
 const $ = (id) => document.getElementById(id);
 
-// ─── WebSocket ──────────────────────────────────────────────────────────────
+// ─── WebSocket ───────────────────────────────────────────────────────────────
 
 function connect() {
-    ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
-        connected = true;
         updateStatus(true);
         console.log('[WS] Connected');
     };
@@ -29,22 +25,20 @@ function connect() {
     ws.onmessage = (event) => {
         if (event.data === 'pong') return;
         try {
-            const msg = JSON.parse(event.data);
-            handleTick(msg);
+            handleTick(JSON.parse(event.data));
         } catch (e) {
-            console.error('[WS] Parse error:', e);
+            console.error('[WS] parse error:', e);
         }
     };
 
     ws.onclose = () => {
-        connected = false;
         updateStatus(false);
-        console.warn('[WS] Disconnected — reconnecting in 3s');
+        console.warn('[WS] disconnected — retrying in 3s');
         setTimeout(connect, 3000);
     };
 
     ws.onerror = (err) => {
-        console.error('[WS] Error:', err);
+        console.error('[WS] error:', err);
         ws.close();
     };
 }
@@ -52,21 +46,20 @@ function connect() {
 function handleTick(msg) {
     tickCount++;
     const { pair, prices, opportunities, timestamp } = msg;
-
     pairs.add(pair);
     state[pair] = { prices, opportunities, timestamp };
     lastUpdate = new Date();
 
     renderPriceGrid();
-    renderArbitrageList();
+    renderArbList();
     updateStats();
     updateClock();
 }
 
-function updateStatus(isConnected) {
+function updateStatus(connected) {
     const dot = document.querySelector('.dot');
     const label = document.querySelector('.dot-label');
-    if (isConnected) {
+    if (connected) {
         dot.classList.add('connected');
         label.textContent = 'CONNECTED';
     } else {
@@ -75,51 +68,69 @@ function updateStatus(isConnected) {
     }
 }
 
-// ─── Render: Price Grid ────────────────────────────────────────────────────
+// ─── Price Grid — bid/ask per exchange ──────────────────────────────────────
+// For each pair:
+//   - Show ASK (what it costs to buy) for each exchange → GREEN = cheapest ASK
+//   - Show BID (what you get selling) for each exchange → RED = highest BID
+//   - Spread column: highest BID − lowest ASK
 
 function renderPriceGrid() {
     const rows = $('price-rows');
-    const allPairs = Array.from(pairs).sort();
-
     rows.innerHTML = '';
+
+    const allPairs = Array.from(pairs).sort();
 
     for (const pair of allPairs) {
         const data = state[pair];
-        if (!data) continue;
+        if (!data || !data.prices) continue;
 
         const { prices } = data;
 
-        // Find cheapest and dearest
-        const validPrices = Object.entries(prices)
-            .filter(([, v]) => v !== null)
-            .sort((a, b) => a[1] - b[1]);
+        // Find lowest ASK across exchanges
+        const asks = EXCHANGES
+            .map(ex => ({ ex, ask: prices[ex]?.ask }))
+            .filter(x => x.ask !== null && x.ask !== undefined);
 
-        const cheapest = validPrices[0]?.[0] || null;
-        const dearest = validPrices[validPrices.length - 1]?.[0] || null;
+        // Find highest BID across exchanges
+        const bids = EXCHANGES
+            .map(ex => ({ ex, bid: prices[ex]?.bid }))
+            .filter(x => x.bid !== null && x.bid !== undefined);
 
-        // Spread between cheapest and dearest
+        const lowestAsk = asks.length ? asks.reduce((a, b) => a.ask < b.ask ? a : b) : null;
+        const highestBid = bids.length ? bids.reduce((a, b) => a.bid > b.bid ? a : b) : null;
+
+        // Spread = highest_bid - lowest_ask (executable arb spread)
         let spread = null;
-        if (validPrices.length >= 2) {
-            const lo = validPrices[0][1];
-            const hi = validPrices[validPrices.length - 1][1];
-            spread = ((hi - lo) / lo) * 100;
+        if (highestBid && lowestAsk) {
+            spread = highestBid.bid - lowestAsk.ask;
+            spread = (spread / lowestAsk.ask) * 100;  // as %
         }
 
         const row = document.createElement('div');
         row.className = 'price-row';
         row.id = `row-${pair}`;
 
-        const cells = [pair];
+        let cells = [];
 
         for (const ex of EXCHANGES) {
             const p = prices[ex];
-            let cls = 'price-cell';
-            if (p === null || p === undefined) {
+            if (!p) {
                 cells.push('<span class="price-cell na">—</span>');
+                continue;
+            }
+            const { bid, ask } = p;
+
+            if (ask !== null && ask !== undefined) {
+                // Show ASK price, color by cheapest/tallest
+                let cls = 'price-cell';
+                if (lowestAsk && ex === lowestAsk.ex) cls += ' cheapest-ask';
+                cells.push(`<span class="${cls}" title="ASK">${fmt(ask)}</span>`);
+            } else if (bid !== null && bid !== undefined) {
+                let cls = 'price-cell';
+                if (highestBid && ex === highestBid.ex) cls += ' highest-bid';
+                cells.push(`<span class="${cls}" title="BID">${fmt(bid)}</span>`);
             } else {
-                if (ex === cheapest) cls += ' cheapest';
-                if (ex === dearest) cls += ' dearest';
-                cells.push(`<span class="${cls}">${fmt(p)}</span>`);
+                cells.push('<span class="price-cell na">—</span>');
             }
         }
 
@@ -130,30 +141,63 @@ function renderPriceGrid() {
             cells.push('<span class="spread-cell">—</span>');
         }
 
-        row.innerHTML = `<span class="pair-symbol">${pair}</span>` + cells.slice(1).join('');
+        row.innerHTML = `<span class="pair-symbol">${pair}</span>` + cells.join('');
         rows.appendChild(row);
     }
 }
 
-// ─── Render: Arbitrage List ─────────────────────────────────────────────────
+// ─── Arbitrage list: top 10 by spread ──────────────────────────────────────────
+// Shows: pair | buy @ LOWEST ASK → sell @ HIGHEST BID
 
-function renderArbitrageList() {
+function renderArbList() {
     const list = $('arb-list');
     const noOpps = $('no-opps');
     const countBadge = $('opp-count');
 
-    // Collect all opportunities across pairs
-    const allOpps = [];
+    // Collect spread per pair: buy at lowest ask, sell at highest bid
+    const pairData = [];
+
     for (const pair of Object.keys(state)) {
-        const opps = state[pair]?.opportunities || [];
-        allOpps.push(...opps.map(o => ({ ...o, pair })));
+        const data = state[pair];
+        if (!data || !data.prices) continue;
+
+        const { prices } = data;
+
+        const asks = EXCHANGES
+            .map(ex => ({ ex, ask: prices[ex]?.ask }))
+            .filter(x => x.ask !== null && x.ask !== undefined);
+
+        const bids = EXCHANGES
+            .map(ex => ({ ex, bid: prices[ex]?.bid }))
+            .filter(x => x.bid !== null && x.bid !== undefined);
+
+        if (asks.length < 1 || bids.length < 1) continue;
+
+        const lowestAsk = asks.reduce((a, b) => a.ask < b.ask ? a : b);
+        const highestBid = bids.reduce((a, b) => a.bid > b.bid ? a : b);
+        if (lowestAsk.ex === highestBid.ex) continue;
+
+        const grossSpread = highestBid.bid - lowestAsk.ask;
+        const grossSpreadPct = (grossSpread / lowestAsk.ask) * 100;
+        const netProfit = grossSpreadPct - 0.20;  // approx 0.1% + 0.1% fees
+
+        pairData.push({
+            pair,
+            buy_exchange: lowestAsk.ex,
+            sell_exchange: highestBid.ex,
+            buy_price: lowestAsk.ask,
+            sell_price: highestBid.bid,
+            spread: grossSpreadPct,
+            netProfit,
+        });
     }
 
-    allOpps.sort((a, b) => b.profit_pct - a.profit_pct);
+    pairData.sort((a, b) => b.spread - a.spread);
+    const top10 = pairData.slice(0, 10);
 
-    countBadge.textContent = allOpps.length;
+    countBadge.textContent = top10.length;
 
-    if (allOpps.length === 0) {
+    if (top10.length === 0) {
         list.innerHTML = '';
         noOpps.style.display = 'flex';
         return;
@@ -162,11 +206,9 @@ function renderArbitrageList() {
     noOpps.style.display = 'none';
     list.innerHTML = '';
 
-    for (const opp of allOpps.slice(0, 10)) {
+    for (const opp of top10) {
         const card = document.createElement('div');
-        card.className = 'arb-card' + (opp.profit_pct > 0.1 ? ' high' : '');
-
-        const spread = ((opp.sell_price - opp.buy_price) / opp.buy_price) * 100;
+        card.className = 'arb-card' + (opp.spread > 0.05 ? ' high' : '');
 
         card.innerHTML = `
             <div class="arb-pair">${opp.pair}</div>
@@ -176,60 +218,54 @@ function renderArbitrageList() {
                 <span class="arb-exchange" style="background:${exColor(opp.sell_exchange)}">${opp.sell_exchange.toUpperCase()}</span>
             </div>
             <div class="arb-prices">
-                <span>Buy @ ${fmt(opp.buy_price)}</span>
-                <span>Sell @ ${fmt(opp.sell_price)}</span>
+                <span>${fmt(opp.buy_price)} ASK</span>
+                <span>${fmt(opp.sell_price)} BID</span>
             </div>
             <div class="arb-metrics">
                 <div class="metric">
                     <span class="metric-label">SPREAD</span>
-                    <span class="metric-value spread">${spread >= 0 ? '+' : ''}${spread.toFixed(4)}%</span>
+                    <span class="metric-value spread">+${opp.spread.toFixed(4)}%</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">NET PROFIT</span>
-                    <span class="metric-value profit">${opp.profit_pct >= 0 ? '+' : ''}${opp.profit_pct.toFixed(4)}%</span>
+                    <span class="metric-value profit">${opp.netProfit >= 0 ? '+' : ''}${opp.netProfit.toFixed(4)}%</span>
                 </div>
             </div>
         `;
         list.appendChild(card);
     }
 
-    // Update best profit stat
-    if (allOpps.length > 0) {
-        bestProfit = allOpps[0].profit_pct;
-    }
-}
-
-function exColor(ex) {
-    const colors = {
-        binance: '#f0b90b', coinbase: '#0052ff', kraken: '#5741d9',
-        bybit: '#f7a800', okx: '#ffffff', gateio: '#17e78c'
-    };
-    return colors[ex] || '#333';
+    if (top10.length > 0) bestSpread = top10[0].spread;
 }
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
 function updateStats() {
     $('stat-pairs').textContent = pairs.size;
-    $('stat-best-spread').textContent = bestProfit !== null ? `${bestProfit >= 0 ? '+' : ''}${bestProfit.toFixed(4)}%` : '—';
-    $('stat-best-profit').textContent = bestProfit !== null ? `${bestProfit >= 0 ? '+' : ''}${bestProfit.toFixed(4)}%` : '—';
-    if (lastUpdate) {
-        $('stat-last').textContent = lastUpdate.toLocaleTimeString();
-    }
+    $('stat-best-spread').textContent =
+        bestSpread !== null ? `${bestSpread >= 0 ? '+' : ''}${bestSpread.toFixed(4)}%` : '—';
+    $('stat-best-profit').textContent =
+        bestSpread !== null ? `${bestSpread - 0.2 >= 0 ? '+' : ''}${(bestSpread - 0.2).toFixed(4)}%` : '—';
+    if (lastUpdate) $('stat-last').textContent = lastUpdate.toLocaleTimeString();
 }
 
 function updateClock() {
-    const now = new Date();
-    $('clock').textContent = now.toLocaleTimeString('en-GB', { hour12: false });
+    $('clock').textContent = new Date().toLocaleTimeString('en-GB', { hour12: false });
 }
 
-// ─── Utilities ─────────────────────────────────────────────────────────────
+function exColor(ex) {
+    const c = {
+        binance: '#f0b90b', coinbase: '#0052ff', kraken: '#5741d9',
+        bybit: '#f7a800', okx: '#ffffff', gateio: '#17e78c'
+    };
+    return c[ex] || '#333';
+}
 
-function fmt(value) {
-    if (value === null || value === undefined) return '—';
-    return value.toLocaleString('en-US', {
+function fmt(v) {
+    if (v === null || v === undefined) return '—';
+    return v.toLocaleString('en-US', {
         minimumFractionDigits: 2,
-        maximumFractionDigits: value < 1 ? 6 : 4,
+        maximumFractionDigits: v < 1 ? 6 : 4,
     });
 }
 

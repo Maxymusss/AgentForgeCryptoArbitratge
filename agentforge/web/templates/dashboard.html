@@ -29,19 +29,23 @@
         <section class="panel price-matrix">
             <div class="panel-header">
                 <span class="panel-icon">📡</span>
-                LIVE PRICE MATRIX
+                LIVE BID / ASK MATRIX
+                <span class="legend">
+                    <span class="legend-item"><span class="dot-green"></span>Lowest ASK (buy)</span>
+                    <span class="legend-item"><span class="dot-red"></span>Highest BID (sell)</span>
+                </span>
             </div>
             <div class="panel-body">
                 <div id="price-grid" class="grid-container">
                     <div class="grid-header">
                         <span>PAIR</span>
-                        <span class="binance">BINANCE</span>
-                        <span class="coinbase">COINBASE</span>
-                        <span class="kraken">KRAKEN</span>
-                        <span class="bybit">BYBIT</span>
-                        <span class="okx">OKX</span>
-                        <span class="gateio">GATE</span>
-                        <span>SPREAD</span>
+                        <span class="binance">BINANCE<br><span class="ex-sub">BID / ASK</span></span>
+                        <span class="coinbase">COINBASE<br><span class="ex-sub">BID / ASK</span></span>
+                        <span class="kraken">KRAKEN<br><span class="ex-sub">BID / ASK</span></span>
+                        <span class="bybit">BYBIT<br><span class="ex-sub">BID / ASK</span></span>
+                        <span class="okx">OKX<br><span class="ex-sub">BID / ASK</span></span>
+                        <span class="gateio">GATE<br><span class="ex-sub">BID / ASK</span></span>
+                        <span>SPREAD<br><span class="ex-sub">BID−ASK %</span></span>
                     </div>
                     <div id="price-rows"></div>
                 </div>
@@ -65,7 +69,7 @@
         </section>
     </div>
 
-    <!-- TOP BAR -->
+    <!-- STATS BAR -->
     <div class="stats-bar">
         <div class="stat">
             <span class="stat-label">EXCHANGES</span>
@@ -77,7 +81,7 @@
         </div>
         <div class="stat">
             <span class="stat-label">BEST SPREAD</span>
-            <span class="stat-value" id="stat-best-spread">—</span>
+            <span class="stat-value profit" id="stat-best-spread">—</span>
         </div>
         <div class="stat">
             <span class="stat-label">BEST PROFIT</span>

@@ -1,19 +1,19 @@
 """Exchange connectors — all public API price fetchers."""
 
-from .binance import fetch_price as binance_fetch
-from .coinbase import fetch_price as coinbase_fetch
-from .kraken import fetch_price as kraken_fetch
-from .bybit import fetch_price as bybit_fetch
-from .okx import fetch_price as okx_fetch
-from .gateio import fetch_price as gateio_fetch
+from .binance import fetch_bid_ask as binance_bid_ask
+from .coinbase import fetch_bid_ask as coinbase_bid_ask
+from .kraken import fetch_bid_ask as kraken_bid_ask
+from .bybit import fetch_bid_ask as bybit_bid_ask
+from .okx import fetch_bid_ask as okx_bid_ask
+from .gateio import fetch_bid_ask as gateio_bid_ask
 from .symbols import Exchange
 
 __all__ = [
-    "binance_fetch",
-    "coinbase_fetch",
-    "kraken_fetch",
-    "bybit_fetch",
-    "okx_fetch",
-    "gateio_fetch",
+    "binance_bid_ask",
+    "coinbase_bid_ask",
+    "kraken_bid_ask",
+    "bybit_bid_ask",
+    "okx_bid_ask",
+    "gateio_bid_ask",
     "Exchange",
 ]

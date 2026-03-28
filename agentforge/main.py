@@ -65,6 +65,12 @@ def main() -> int:
         help="Enable Telegram alerts.",
     )
     parser.add_argument(
+        "--max-results",
+        type=int,
+        default=5,
+        help="Maximum number of top opportunities shown per round. Default: 5",
+    )
+    parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable debug logging."
     )
     args = parser.parse_args()
@@ -87,11 +93,12 @@ def main() -> int:
         exchanges = None  # use all configured
 
     logger.info(
-        "Starting monitor — pairs=%s, interval=%ss, min_profit=%s, telegram=%s",
+        "Starting monitor — pairs=%s, interval=%ss, min_profit=%s, telegram=%s, max_results=%s",
         pairs,
         args.interval or CONFIG.poll_interval,
         args.min_profit or CONFIG.min_profit_pct,
         args.telegram,
+        args.max_results,
     )
 
     try:
@@ -101,6 +108,8 @@ def main() -> int:
                 interval=args.interval,
                 min_profit_pct=args.min_profit,
                 enabled_exchanges=exchanges,
+                telegram_enabled=args.telegram,
+                max_results=args.max_results,
             )
         )
     except KeyboardInterrupt:

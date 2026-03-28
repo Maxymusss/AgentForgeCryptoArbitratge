@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import requests
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from ..models import ArbitrageOpportunity
 
-# Bot token (from config — set TELEGRAM_BOT_TOKEN in .env or openclaw.json)
-_TELEGRAM_TOKEN = "8782066565:AAHNlnYFgp0-7MeLpJ2S4BCLNx014uJ9aBA"
-_TELEGRAM_API = f"https://api.telegram.org/bot{_TELEGRAM_TOKEN}"
+logger = logging.getLogger(__name__)
 
 # Chat ID — user must message the bot first to register
 _CHAT_ID: Optional[str] = None
@@ -37,13 +36,17 @@ def send_message(text: str) -> bool:
     Returns:
         True if sent successfully, False otherwise.
     """
-    if _CHAT_ID is None:
+    from ..config import CONFIG
+
+    chat_id = _CHAT_ID or CONFIG.telegram_chat_id
+    if not chat_id:
         logger.warning("Telegram: no chat_id configured, skipping message")
         return False
 
-    url = f"{_TELEGRAM_API}/sendMessage"
+    token = CONFIG.telegram_bot_token
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
-        "chat_id": _CHAT_ID,
+        "chat_id": chat_id,
         "text": text,
         "parse_mode": "HTML",
     }
@@ -58,37 +61,9 @@ def send_message(text: str) -> bool:
         return False
 
 
-def send_arbitrage_alert(
-    pair: str,
-    buy_exchange: str,
-    sell_exchange: str,
-    buy_price: float,
-    sell_price: float,
-    profit_pct: float,
-) -> bool:
-    """Format and send an arbitrage opportunity alert to Telegram.
+def send_opportunity(opp: "ArbitrageOpportunity") -> bool:
+    """Send an ArbitrageOpportunity alert via Telegram.
 
-    Args:
-        pair: Trading pair, e.g. "BTC/USDT".
-        buy_exchange: Exchange to buy on.
-        sell_exchange: Exchange to sell on.
-        buy_price: Price on buy exchange.
-        sell_price: Price on sell exchange.
-        profit_pct: Net profit percentage after fees.
-
-    Returns:
-        True if sent successfully.
+    Uses the opportunity's to_telegram() method for formatting.
     """
-    spread_pct = ((sell_price - buy_price) / buy_price) * 100
-
-    message = (
-        f"💰 <b>Arbitrage Opportunity</b>\n\n"
-        f"Pair: <code>{pair}</code>\n"
-        f"Buy:  <b>{buy_exchange}</b> @ ${buy_price:,.4f}\n"
-        f"Sell: <b>{sell_exchange}</b> @ ${sell_price:,.4f}\n\n"
-        f"Spread: <code>{spread_pct:+.4f}%</code>\n"
-        f"Net profit: <b>{profit_pct:+.4f}%</b>\n\n"
-        f"⚠️ Verify balances & API limits before trading!"
-    )
-
-    return send_message(message)
+    return send_message(opp.to_telegram())

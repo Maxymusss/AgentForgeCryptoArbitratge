@@ -44,6 +44,17 @@ class Config:
     trading_pairs: tuple[str, ...] = (
         "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT",
         "BNBUSDT", "DOGEUSDT", "ADAUSDT", "AVAXUSDT",
+        "DOTUSDT", "MATICUSDT", "LINKUSDT", "LTCUSDT",
+        "UNIUSDT", "ATOMUSDT", "XLMUSDT", "ETCUSDT",
+        "FILUSDT", "NEARUSDT", "TRXUSDT", "DASHUSDT",
+        "MANAUSDT", "AXSUSDT", "SANDUSDT", "CHZUSDT",
+        "AAVEUSDT", "LRCUSDT", "ENJUSDT", "GALAUSDT",
+        "APEUSDT", "SHIBUSDT", "KAVAUSDT", "KSMUSDT",
+        "ZECUSDT", "XMRUSDT", "XTZUSDT", "EOSUSDT",
+        "ALGOUSDT", "VETUSDT", "THETAUSDT", "FTMUSDT",
+        "MKRUSDT", "COMPUSDT", "SNXUSDT", "YFIUSDT",
+        "SUSHIUSDT", "CRVUSDT", "LDOUSDT", "APEUSDT",
+        "GMXUSDT", "RUNEUSDT",
     )
 
     # How many of the top coins to scan (from CoinGecko)

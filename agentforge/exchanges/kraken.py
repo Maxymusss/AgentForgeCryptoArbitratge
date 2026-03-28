@@ -1,4 +1,4 @@
-"""Kraken exchange connector — public REST API for spot prices."""
+"""Kraken exchange connector — public REST API for spot bid/ask prices."""
 
 from __future__ import annotations
 
@@ -14,16 +14,19 @@ logger = logging.getLogger(__name__)
 _KRAKEN_TICKER_URL = "https://api.kraken.com/0/public/Ticker"
 
 
-def fetch_price(pair: str) -> float | None:
-    """Fetch the current spot price for a pair on Kraken.
+def fetch_bid_ask(pair: str) -> tuple[float | None, float | None]:
+    """Fetch the current bid and ask prices for a pair on Kraken.
 
     Args:
-        pair: Binance-style symbol, e.g. "BTCUSDT" (converts internally).
+        pair: Binance-style symbol, e.g. "BTCUSDT".
 
     Returns:
-        Current price as a float, or None if the request fails.
+        (bid, ask) — either may be None if the request fails or pair unsupported.
     """
     kraken_pair = normalize(pair, Exchange.KRAKEN)
+    if kraken_pair is None:
+        logger.warning("Kraken: pair %s not supported", pair)
+        return None, None
 
     try:
         resp = requests.get(_KRAKEN_TICKER_URL, params={"pair": kraken_pair}, timeout=10)
@@ -32,26 +35,28 @@ def fetch_price(pair: str) -> float | None:
 
         if data.get("error"):
             logger.warning("Kraken API error for %s: %s", kraken_pair, data["error"])
-            return None
+            return None, None
 
-        # Result is keyed by pair name (e.g. "XXBTZUSD") → tick data
         result = data.get("result")
         if not result:
-            return None
+            return None, None
 
-        # Get the first result key (the pair name as Kraken knows it)
         tick_data = next(iter(result.values()), None)
         if tick_data is None:
-            return None
+            return None, None
 
-        # c[0] = last trade closed price (string)
-        price = float(tick_data["c"][0])
-        logger.debug("Kraken %s @ %s", kraken_pair, price)
-        return price
+        # Kraken Ticker: b = [bid, whole_lot, volume], a = [ask, whole_lot, volume]
+        bid = float(tick_data["b"][0]) if tick_data["b"] else None
+        ask = float(tick_data["a"][0]) if tick_data["a"] else None
+        logger.debug("Kraken %s bid=%s ask=%s", kraken_pair, bid, ask)
+        return bid, ask
 
     except requests.RequestException as exc:
-        logger.warning("Kraken price fetch failed for %s: %s", pair, exc)
-        return None
+        logger.warning("Kraken bid/ask fetch failed for %s: %s", pair, exc)
+        return None, None
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("Kraken unexpected response for %s: %s", pair, exc)
-        return None
+        return None, None
+
+
+
